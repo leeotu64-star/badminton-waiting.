@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>장군봉 체육관 실시간 대기 현황 (관리자 모드)</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 25px; }
+        .admin-panel { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .admin-panel h2 { margin-top: 0; font-size: 20px; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .global-controls { margin-bottom: 20px; display: flex; gap: 15px; align-items: center; background: #ecf0f1; padding: 12px 15px; border-radius: 8px; }
+        .court-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
+        .court-card { background: #2c3e50; color: white; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .court-card h3 { margin: 0 0 10px 0; font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
+        .waiting-count { font-size: 32px; font-weight: bold; color: #e67e22; margin: 10px 0; }
+        .list-box { background: white; color: #333; height: 160px; border-radius: 6px; padding: 8px; text-align: left; overflow-y: auto; font-size: 13px; margin-bottom: 5px; }
+        .list-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 3px; }
+        .eject-btn { background: #e74c3c; color: white; border: none; border-radius: 3px; padding: 3px 7px; font-size: 11px; cursor: pointer; font-weight: bold; }
+        .capacity-input { width: 45px; text-align: center; font-weight: bold; padding: 2px; }
+        .btn-toggle { padding: 6px 14px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; }
+        .on { background: #27ae60; color: white; }
+        .off { background: #c0392b; color: white; }
+        .reset-all-btn { background: #7f8c8d; font-size: 12px; padding: 6px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>장군봉 체육관 실시간 대기 시스템</h1>
+    <div class="admin-panel">
+        <h2>
+            <span>관리자 대기 현황판</span>
+            <button class="reset-all-btn" onclick="resetAllData()">전체 데이터 초기화</button>
+        </h2>
+        <div class="global-controls">
+            <label><b>스마트폰 대기 접수 상태:</b></label>
+            <button id="globalToggleBtn" class="btn-toggle on" onclick="toggleGlobalRegistration()">등록 ON</button>
+            <span style="font-size: 13px; color: #555;">(OFF 시 고객 스마트폰 화면에서 접수가 차단됩니다)</span>
+        </div>
+        <div class="court-grid" id="courtGrid"></div>
+    </div>
+</div>
+<script>
+    function getSystemData() {
+        let defaultData = {
+            isGlobalOpen: true,
+            courts: { 1: {max:5, list:[]}, 2: {max:5, list:[]}, 3: {max:5, list:[]}, 4: {max:5, list:[]}, 5: {max:5, list:[]} }
+        };
+        return JSON.parse(localStorage.getItem('gym_system')) || defaultData;
+    }
+    function saveSystemData(data) {
+        localStorage.setItem('gym_system', JSON.stringify(data));
+        renderUI();
+    }
+    function renderUI() {
+        let sys = getSystemData();
+        let toggleBtn = document.getElementById('globalToggleBtn');
+        if (sys.isGlobalOpen) {
+            toggleBtn.className = 'btn-toggle on'; toggleBtn.innerText = '등록 ON';
+        } else {
+            toggleBtn.className = 'btn-toggle off'; toggleBtn.innerText = '등록 OFF';
+        }
+        let gridHtml = '';
+        for (let i = 1; i <= 5; i++) {
+            let court = sys.courts[i];
+            let listHtml = '';
+            if (court.list.length === 0) {
+                listHtml = '<div style="color: #888; text-align: center; margin-top: 55px;">대기팀 없음</div>';
+            } else {
+                court.list.forEach((name, index) => {
+                    listHtml += `<div class="list-item"><span><b>${index + 1}.</b> ${name}</span><button class="eject-btn" onclick="ejectUser(${i}, ${index})">퇴장</button></div>`;
+                });
+            }
+            gridHtml += `<div class="court-card"><h3>Court ${i}<span style="font-size: 11px; font-weight: normal;">정원: <input type="number" class="capacity-input" value="${court.max}" min="1" max="20" onchange="updateMax(${i}, this.value)"></span></h3><div class="waiting-count">${court.list.length} / ${court.max}</div><div class="list-box">${listHtml}</div></div>`;
+        }
+        document.getElementById('courtGrid').innerHTML = gridHtml;
+    }
+    function toggleGlobalRegistration() {
+        let sys = getSystemData(); sys.isGlobalOpen = !sys.isGlobalOpen; saveSystemData(sys);
+    }
+    function updateMax(courtNum, val) {
+        let sys = getSystemData(); sys.courts[courtNum].max = parseInt(val) || 5; saveSystemData(sys);
+    }
+    function ejectUser(courtNum, index) {
+        let sys = getSystemData();
+        let userName = sys.courts[courtNum].list[index];
+        if (confirm(`[${userName}]님을 규정 위반 사유로 강제 퇴장시키겠습니까?`)) {
+            sys.courts[courtNum].list.splice(index, 1);
+            saveSystemData(sys);
+        }
+    }
+    function resetAllData() {
+        if (confirm("모든 코트의 대기 명단을 초기화하시겠습니까?")) {
+            localStorage.removeItem('gym_system'); renderUI();
+        }
+    }
+    window.addEventListener('storage', function(e) { if (e.key === 'gym_system') renderUI(); });
+    setInterval(renderUI, 1000);
+    window.onload = function() { renderUI(); };
+</script>
+</body>
+</html>
